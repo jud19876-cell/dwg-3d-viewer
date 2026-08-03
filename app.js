@@ -720,7 +720,7 @@ function uploadAndRenderFile(file) {
     return;
   }
 
-  // Raw DWG Binary File Loader with Express Server API
+  // Raw DWG Binary File Loader - Route directly to live Render.com cloud server
   loadingFilename.innerText = `파일명: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
   loadingSub.innerText = "서버 C++ CAD 엔진으로 DWG 도면 변환 중...";
   progressBar.style.width = "30%";
@@ -730,7 +730,11 @@ function uploadAndRenderFile(file) {
   formData.append('file', file);
 
   const xhr = new XMLHttpRequest();
-  xhr.open('POST', '/api/upload', true);
+  const serverUrl = window.location.origin.includes('github.io')
+    ? 'https://dwg-3d-viewer.onrender.com/api/upload'
+    : '/api/upload';
+
+  xhr.open('POST', serverUrl, true);
 
   xhr.upload.onprogress = function(e) {
     if (e.lengthComputable) {
@@ -775,7 +779,7 @@ function uploadAndRenderFile(file) {
 
   xhr.onerror = function() {
     loadingOverlay.classList.add('hidden');
-    alert("서버와 통신 중 연결 에러가 발생했습니다.");
+    alert("서버와 통신 중 연결 에러가 발생했습니다. 잠시 후 다시 시도해 주세요.");
   };
 
   xhr.send(formData);
