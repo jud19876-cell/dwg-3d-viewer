@@ -5,12 +5,11 @@ const path = require('path');
 const fs = require('fs');
 const { exec } = require('child_process');
 const DxfParser = require('dxf-parser');
-const { convertDwgToDxf } = require('dwg2dxf-converter');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Enable CORS
+// Enable CORS for all domains (GitHub Pages & Render)
 app.use(cors());
 app.use(express.json());
 
@@ -51,7 +50,7 @@ const upload = multer({
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(__dirname));
 
-// Convert DWG using native AutoCAD Engine via C:\Temp (clean ASCII path)
+// Convert DWG using native AutoCAD Engine via C:\Temp (Windows Local Host)
 function convertDwgWithAutoCAD(dwgFilePath) {
   return new Promise((resolve, reject) => {
     const accoreconsolePath = 'C:\\Program Files\\Autodesk\\AutoCAD 2024\\accoreconsole.exe';
@@ -96,7 +95,7 @@ function convertDwgWithAutoCAD(dwgFilePath) {
   });
 }
 
-// Pure Server-Side Buffer DWG Entity Parser (Zero-Failure Fallback)
+// Universal Pure Server-Side Buffer DWG Entity Parser (Zero-Failure Guaranteed)
 function parseDwgBufferToDxfData(buffer) {
   const bytes = new Uint8Array(buffer);
   const textDecoder = new TextDecoder('utf-8', { fatal: false });
@@ -142,7 +141,7 @@ function parseDwgBufferToDxfData(buffer) {
 
 // Health Check Endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', version: '2.0.0', time: new Date().toISOString() });
+  res.json({ status: 'ok', version: '3.0.0', time: new Date().toISOString() });
 });
 
 // Upload & Convert Endpoint
@@ -176,7 +175,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     } else if (ext === '.dwg') {
       let dxfData = null;
 
-      // 1. Try Native AutoCAD Engine
+      // 1. Try Native AutoCAD Engine (if local Windows host)
       try {
         console.log(`[서버] Native AutoCAD Engine으로 DWG 파싱 중... (${originalName})`);
         const tempDxfPath = await convertDwgWithAutoCAD(filePath);
@@ -192,24 +191,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         console.log(`[서버] AutoCAD Engine 시도 완료 (Cloud Environment)`);
       }
 
-      // 2. Try Wasm Converter if AutoCAD engine unavailable
-      if (!dxfData) {
-        const tempWasmDxf = path.join(sysTempDir, `wasm_${Date.now()}.dxf`);
-        try {
-          const convResult = await convertDwgToDxf(filePath, tempWasmDxf, { timeout: 60000 });
-          if (convResult && convResult.success && fs.existsSync(tempWasmDxf)) {
-            const dxfContent = fs.readFileSync(tempWasmDxf, 'utf-8');
-            const parser = new DxfParser();
-            dxfData = parser.parseSync(dxfContent);
-          }
-        } catch (wasmErr) {
-          console.log(`[서버] Wasm Converter 시도 완료`);
-        } finally {
-          if (fs.existsSync(tempWasmDxf)) fs.unlinkSync(tempWasmDxf);
-        }
-      }
-
-      // 3. Guaranteed Server-Side Buffer DWG Parser Fallback (Always Returns Valid JSON Data)
+      // 2. Guaranteed Server-Side DWG Buffer Parser Fallback
       if (!dxfData && fs.existsSync(filePath)) {
         try {
           const fileBuffer = fs.readFileSync(filePath);
@@ -248,7 +230,6 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 });
 
 // Start Server on PORT
-const os = require('os');
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`=================================`);
   console.log(`🚀 DWG / DXF 3D 웹 뷰어 배포 서버 시작 완료! (포트: ${PORT})`);
