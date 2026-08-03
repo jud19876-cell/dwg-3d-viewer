@@ -220,17 +220,29 @@ function onMouseMove(event) {
 function setupUIEvents() {
   const fileInput = document.getElementById('file-input');
 
-  fileInput.addEventListener('click', (e) => {
-    e.target.value = '';
-  });
+  // Trigger file selection from Top Header Button
+  const btnOpenFile = document.getElementById('btn-open-file');
+  if (btnOpenFile) {
+    btnOpenFile.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
+  }
 
-  document.getElementById('btn-open-file').addEventListener('click', () => {
-    fileInput.click();
-  });
+  // Trigger file selection from Center Dropzone Box
+  const dropzoneBox = document.getElementById('dropzone-box');
+  if (dropzoneBox) {
+    dropzoneBox.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
+  }
 
+  // Listen for file selection change
   fileInput.addEventListener('change', (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      uploadAndRenderFile(e.target.files[0]);
+    if (fileInput.files && fileInput.files.length > 0) {
+      const selectedFile = fileInput.files[0];
+      uploadAndRenderFile(selectedFile);
     }
   });
 
@@ -682,13 +694,15 @@ function setupDragAndDrop() {
   window.addEventListener('drop', (e) => {
     e.preventDefault();
     box.classList.remove('dragover');
-    if (e.dataTransfer.files.length > 0) {
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       uploadAndRenderFile(e.dataTransfer.files[0]);
     }
   });
 }
 
 function uploadAndRenderFile(file) {
+  if (!file) return;
+
   const loadingOverlay = document.getElementById('loading-overlay');
   const loadingFilename = document.getElementById('loading-filename');
   const progressBar = document.getElementById('progress-bar');
