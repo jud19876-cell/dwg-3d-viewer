@@ -60,13 +60,36 @@ function cleanDxfText(rawText) {
   return txt.trim();
 }
 
+// Strict filter to discard random binary stream text noise
+function isRealCadText(str) {
+  if (!str) return false;
+  const s = str.trim();
+  if (s.length < 2 || s.length > 60) return false;
+
+  // 1. Korean Text is ALWAYS valid CAD text
+  if (/[\u3131-\u318E\uAC00-\uD7A3]/.test(s)) {
+    return true;
+  }
+
+  // 2. Discard random jumbled binary string tokens (e.g. "GB1D8731wHz1sZ26")
+  if (/^[A-Za-z0-9]{6,}$/.test(s) && /[A-Z]/.test(s) && /[a-z]/.test(s) && /[0-9]/.test(s)) {
+    return false;
+  }
+
+  // 3. Match clean CAD terms (e.g., HVAC, ROOM, AHU-01, PIPE, DN100, ELEVATION, LEVEL 1, etc.)
+  if (/^([A-Z0-9_\-\.\s]{2,}|[0-9]+(\.[0-9]+)?\s*(mm|m|mm2|kg|°C|℃|FL|SL|CH)?)$/i.test(s)) {
+    return true;
+  }
+
+  return false;
+}
+
 // Filter function to catch internal mechanical equipment part codes
 function isInternalMachinePartCode(str) {
   if (!str) return false;
   const s = str.trim();
   
-  if (/[\u3131-\u318E\uAC00-\uD7A3]/.test(s)) return false;
-  if (s.includes('lx') || s.includes('°C') || s.includes('℃') || s.includes('평') || s.includes('*') || s.includes('[') || s.includes(']') || (s.includes('/') && !s.includes('C/R') && !s.includes('C/P') && !s.includes('1/10') && !s.includes('O/F')) || s.includes('BY') || s.includes('DATE') || s.includes('TITLE')) return false;
+  if (!isRealCadText(s)) return true;
 
   if (s.includes('TM KOREA') || s.includes('Data 5') || s.includes('C/R') || s.includes('C/P') || s.includes('O/F')) return true;
   if (/^[0-9]{2}\s*H[0-9]{3}/i.test(s)) return true;
@@ -836,7 +859,7 @@ function fallbackClientDwgParser(file) {
   reader.readAsArrayBuffer(file);
 }
 
-// Parse DWG Binary Stream cleanly without random line noise
+// Parse DWG Binary Stream cleanly without random line or string noise
 function parseDwgBinaryStream(arrayBuffer, fileName) {
   const bytes = new Uint8Array(arrayBuffer);
   const textDecoder = new TextDecoder('utf-8', { fatal: false });
@@ -848,24 +871,24 @@ function parseDwgBinaryStream(arrayBuffer, fileName) {
   const entities = [];
   const layerSet = new Set(['0', 'DWG_TEXT_LAYER']);
   
-  // Extract text tokens from binary stream
-  const textMatches = rawString.match(/([\uAC00-\uD7A3]+|[A-Za-z0-9_\-\.\/]{4,})/g) || [];
-  let currentX = -2000, currentY = 2000;
+  // Extract ONLY valid Korean text labels
+  const koreanMatches = rawString.match(/[\uAC00-\uD7A3]{2,}/g) || [];
+  let currentX = -1000, currentY = 1000;
 
-  textMatches.forEach((str, idx) => {
+  koreanMatches.forEach((str, idx) => {
     const s = str.trim();
-    if (s.length >= 2 && !isInternalMachinePartCode(s) && !s.includes('AC1032') && !s.includes('RdAk')) {
-      currentX += 600;
-      if (currentX > 2000) {
-        currentX = -2000;
-        currentY -= 400;
+    if (s.length >= 2 && isRealCadText(s)) {
+      currentX += 500;
+      if (currentX > 1000) {
+        currentX = -1000;
+        currentY -= 300;
       }
       entities.push({
         type: 'TEXT',
         layer: 'DWG_TEXT_LAYER',
         text: s,
         position: { x: currentX, y: currentY, z: 0 },
-        height: 220,
+        height: 180,
         color: 7
       });
     }
@@ -1003,7 +1026,7 @@ function renderCadDataFast(cadData, fileSizeMb) {
             break;
           }
 
-          const textHeight = entity.height ? Math.max(entity.height * 2.5, 120.0) : 260.0;
+          const textHeight = entity.height ? Math.min(Math.max(entity.height * 1.5, 60.0), 300.0) : 180.0;
           const pos = entity.position || entity.startPoint || { x: 0, y: 0, z: 0 };
           const v = applyTransform(pos, parentMatrix);
           const layerDefColor = layerColorMap.get(layer) || 0xffffff;
@@ -1135,7 +1158,7 @@ function createTextSprite(text, height, colorHex, attachmentPoint) {
   sprite.center.set(anchorX, anchorY);
 
   const aspect = width / canvasHeight;
-  const h = Math.max(height, 50.0);
+  const h = Math.min(Math.max(height, 40.0), 200.0);
   sprite.scale.set(h * aspect, h, 1);
   return sprite;
 }
