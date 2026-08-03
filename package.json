@@ -1,0 +1,27 @@
+{
+  "name": "dxf-dwg-3d-viewer",
+  "version": "1.0.0",
+  "description": "Full-stack DWG & DXF 3D Web Viewer Application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "dwg",
+    "dxf",
+    "threejs",
+    "cad-viewer",
+    "3d-viewer"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dwg2dxf-converter": "^1.0.4",
+    "dxf-parser": "^1.1.2",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "three": "^0.185.1"
+  }
+}

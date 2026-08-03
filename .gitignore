@@ -1,0 +1,15 @@
+node_modules/
+uploads/*
+!uploads/.gitkeep
+.DS_Store
+*.log
+*.dwg
+*.dxf
+*.obj
+*.7z
+*.zip
+*.scr
+test_*
+food_factory_sim/
+ai_agent/
+DWG_3D_뷰어_배포키트_v1.0/

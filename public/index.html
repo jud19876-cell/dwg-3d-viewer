@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DWG / DXF 3D 웹 도면 뷰어</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Three.js (r128) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Three.js OrbitControls -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- dxf-parser (Browser Fallback) -->
+  <script src="https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/dxf-parser.js"></script>
+  <!-- jsPDF for High-DPI CAD PDF Plot Export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- Three.js 3D Canvas -->
+  <div id="canvas-container"></div>
+
+  <!-- Interactive Selection Rectangle Overlay for Window Plot Selection -->
+  <div id="selection-box" class="hidden"></div>
+
+  <!-- UI Overlay -->
+  <div class="ui-layer">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <div class="brand-icon">CAD</div>
+        <div class="brand-title">DWG / DXF 3D 웹 도면 뷰어</div>
+      </div>
+      <div class="toolbar">
+        <button class="btn btn-primary" id="btn-open-file">
+          <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+          도면 열기
+        </button>
+        <button class="btn" id="btn-fit-view" title="화면에 맞추기">
+          <svg viewBox="0 0 24 24"><path d="M3 5v4h2V7h2V5H3zm0 10h2v-2H3v4zm14 4h2v-4h-2v4zm2-14h-4v2h2v2h2V5z"/></svg>
+          화면 맞춤
+        </button>
+        <button class="btn" id="btn-toggle-view" title="2D/3D 시점 전환">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          <span id="view-mode-text">2D / 3D 전환</span>
+        </button>
+        <button class="btn" id="btn-toggle-layers">
+          <svg viewBox="0 0 24 24"><path d="M11.99 18.54l-7.37-5.73L3 14.07l9 7 9-7-1.63-1.27-7.38 5.74zM12 16l7.36-5.73L21 9l-9-7-9 7 1.63 1.27L12 16z"/></svg>
+          레이어 목록
+        </button>
+        <button class="btn btn-accent" id="btn-plot-modal" title="오토캐드 고화질 플롯 / 인쇄">
+          <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+          도면 인쇄/출력
+        </button>
+        <button class="btn" id="btn-toggle-bg">
+          <svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.40 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
+          배경색
+        </button>
+      </div>
+    </header>
+
+    <!-- Side Layer Panel -->
+    <div class="sidebar collapsed" id="layer-sidebar">
+      <div class="sidebar-header">
+        <span>레이어 목록 (<span id="layer-count">0</span>)</span>
+        <button class="btn" id="btn-close-sidebar" style="padding: 4px 8px;">✕</button>
+      </div>
+      <div class="sidebar-content" id="layer-list-container">
+        <!-- Layer Items -->
+      </div>
+    </div>
+
+    <!-- Mouse Controls Helper Banner -->
+    <div class="controls-guide" id="controls-guide">
+      <span><kbd>마우스 왼쪽 드래그</kbd> 도면 이동 (Pan)</span>
+      <span><kbd>마우스 휠</kbd> 확대 / 축소 (Zoom)</span>
+      <span><kbd>마우스 오른쪽 드래그</kbd> 3D 회전 (Rotate)</span>
+    </div>
+
+    <!-- Window Selection Banner Mode -->
+    <div class="select-banner hidden" id="select-banner">
+      <span>🖱️ 인쇄할 도면 1장의 <strong>영역(네모 상자)을 마우스로 드래그</strong>하여 선택하세요.</span>
+      <button class="btn btn-sm" id="btn-cancel-select">선택 취소</button>
+    </div>
+
+    <!-- Footer Status Bar -->
+    <footer>
+      <div class="status-group">
+        <div class="status-item">
+          <span>파일명:</span>
+          <strong id="status-filename">열린 도면 없음</strong>
+        </div>
+        <div class="status-item">
+          <span>용량/객체:</span>
+          <strong id="status-entities">-</strong>
+        </div>
+      </div>
+      <div class="status-group">
+        <div class="status-item">
+          <span>좌표:</span>
+          <strong id="status-coords">X: 0.00, Y: 0.00, Z: 0.00</strong>
+        </div>
+        <div class="status-item">
+          <span class="badge" id="status-mode">2D Orthographic Mode</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- AutoCAD Style Plot (Print/Export) Modal -->
+  <div id="plot-modal" class="modal-backdrop hidden">
+    <div class="plot-dialog">
+      <div class="plot-dialog-header">
+        <div class="plot-dialog-title">
+          <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+          플롯 / 인쇄 설정 (AutoCAD High-DPI Plotter)
+        </div>
+        <button class="btn-close" id="btn-close-plot-modal">✕</button>
+      </div>
+
+      <div class="plot-dialog-body">
+        <div class="plot-grid">
+          <!-- Left Column -->
+          <div class="plot-col">
+            <!-- Printer / Destination -->
+            <fieldset class="plot-group">
+              <legend>프린터 / 출력 대상</legend>
+              <div class="plot-row">
+                <label>출력 형식:</label>
+                <select id="plot-target-select" class="form-control">
+                  <option value="pdf">PDF 고화질 문서 저장 (300 DPI Vector PDF)</option>
+                  <option value="png">PNG 4K 이미지 저장 (Ultra-Res PNG)</option>
+                  <option value="print">프린터 직접 인쇄 (Physical Printer)</option>
+                </select>
+              </div>
+            </fieldset>
+
+            <!-- Plot Area -->
+            <fieldset class="plot-group">
+              <legend>플롯 영역 (인쇄 범위)</legend>
+              <div class="plot-row">
+                <label>플롯 대상:</label>
+                <select id="plot-area-select" class="form-control">
+                  <option value="window">윈도우 영역 지정 (Window Box)</option>
+                  <option value="display">현재 전체 화면 (Display View)</option>
+                </select>
+                <button class="btn btn-sm btn-accent" id="btn-trigger-window-select">윈도우(O)<</button>
+              </div>
+              <div class="plot-status-text" id="plot-window-status">
+                인쇄 영역: 윈도우 버튼을 눌러 도면 영역을 지정하세요
+              </div>
+            </fieldset>
+
+            <!-- Paper Size -->
+            <fieldset class="plot-group">
+              <legend>용지 크기 & 방향 (Paper & Orientation)</legend>
+              <div class="plot-row">
+                <label>용지 크기:</label>
+                <select id="plot-paper-select" class="form-control">
+                  <option value="a3">A3 (420 x 297 mm)</option>
+                  <option value="a4">A4 (297 x 210 mm)</option>
+                  <option value="a2">A2 (594 x 420 mm)</option>
+                  <option value="a1">A1 (841 x 594 mm)</option>
+                </select>
+              </div>
+              <div class="plot-row" style="margin-top: 8px;">
+                <label>도면 방향:</label>
+                <div class="radio-group">
+                  <label><input type="radio" name="orientation" value="landscape" checked> 가로 (Landscape)</label>
+                  <label><input type="radio" name="orientation" value="portrait"> 세로 (Portrait)</label>
+                </div>
+              </div>
+            </fieldset>
+          </div>
+
+          <!-- Right Column -->
+          <div class="plot-col">
+            <!-- Plot Style CTB -->
+            <fieldset class="plot-group">
+              <legend>플롯 스타일 테이블 (펜 지정 CTB)</legend>
+              <div class="plot-row">
+                <label>스타일(CTB):</label>
+                <select id="plot-ctb-select" class="form-control">
+                  <option value="monochrome">monochrome.ctb (흑백 / 단색 인쇄)</option>
+                  <option value="color">Full Color (원본 레이어 색상)</option>
+                  <option value="grayscale">grayscale.ctb (회색조)</option>
+                </select>
+              </div>
+            </fieldset>
+
+            <!-- Plot Options -->
+            <fieldset class="plot-group">
+              <legend>플롯 옵션 (Fit & Background)</legend>
+              <div class="checkbox-group">
+                <label><input type="checkbox" id="plot-opt-fit" checked> 용지에 맞춤 (Fit to Paper - 여백 자동 보정)</label>
+                <label><input type="checkbox" id="plot-opt-center" checked> 플롯의 중심 (Center Plot)</label>
+                <label><input type="checkbox" id="plot-opt-bg-white" checked> 흰색 용지 배경으로 출력 (White Paper)</label>
+              </div>
+            </fieldset>
+
+            <!-- Live Thumbnail Preview Box -->
+            <div class="plot-preview-box" id="plot-preview-container">
+              <div class="paper-preview-wrapper" id="paper-preview-wrapper">
+                <canvas id="paper-preview-canvas" width="280" height="198"></canvas>
+                <div class="paper-preview-badge" id="paper-preview-badge">A3 Landscape (300 DPI)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="plot-dialog-footer">
+        <button class="btn btn-accent" id="btn-plot-preview">🔍 전체 화면 미리보기(P)...</button>
+        <div class="footer-right">
+          <button class="btn btn-primary" id="btn-execute-plot">확인 (플롯 / 인쇄 저장)</button>
+          <button class="btn" id="btn-cancel-plot">취소</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full-Screen Interactive AutoCAD Print Preview Modal with Live Controls -->
+  <div id="full-preview-modal" class="modal-backdrop hidden" style="z-index: 1200;">
+    <div class="full-preview-dialog">
+      <div class="full-preview-header">
+        <div class="full-preview-title">
+          <span>🔍 AutoCAD 300 DPI 인쇄 미리보기</span>
+        </div>
+        
+        <!-- Live Preview Controls in Header -->
+        <div class="preview-toolbar-controls">
+          <div class="control-item">
+            <label>용지:</label>
+            <select id="preview-paper-select" class="form-control-sm">
+              <option value="a3">A3 (420x297)</option>
+              <option value="a4">A4 (297x210)</option>
+              <option value="a2">A2 (594x420)</option>
+              <option value="a1">A1 (841x594)</option>
+            </select>
+          </div>
+          <div class="control-item">
+            <label>방향:</label>
+            <select id="preview-orientation-select" class="form-control-sm">
+              <option value="landscape">가로</option>
+              <option value="portrait">세로</option>
+            </select>
+          </div>
+          <div class="control-item">
+            <label>색상(CTB):</label>
+            <select id="preview-ctb-select" class="form-control-sm">
+              <option value="monochrome">monochrome.ctb (흑백)</option>
+              <option value="color">Full Color (컬러)</option>
+              <option value="grayscale">grayscale.ctb (회색조)</option>
+            </select>
+          </div>
+          <div class="control-item">
+            <label>배경:</label>
+            <select id="preview-bg-select" class="form-control-sm">
+              <option value="white">흰색 용지 (White)</option>
+              <option value="dark">검은색 화면 (Dark)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="preview-actions">
+          <button class="btn btn-primary" id="btn-preview-execute">🖨️ 이 설정으로 플롯 출력하기</button>
+          <button class="btn" id="btn-close-full-preview">닫기</button>
+        </div>
+      </div>
+      <div class="full-preview-body">
+        <div class="full-preview-paper" id="full-preview-paper">
+          <img id="full-preview-image" src="" alt="AutoCAD Plot Preview">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Drag and Drop Overlay -->
+  <div id="dropzone-overlay">
+    <label class="dropzone-box" id="dropzone-box" for="file-input">
+      <div class="dropzone-icon">
+        <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+      </div>
+      <div class="dropzone-title">DWG 또는 DXF 파일을 드래그 앤 드롭 하세요</div>
+      <div class="dropzone-sub">
+        또는 이 상자를 클릭하여 컴퓨터에서 도면 파일을 선택하세요.<br>
+        (AutoCAD 2D/3D <strong>.dwg</strong> 및 <strong>.dxf</strong> 대용량 도면 지원)
+      </div>
+      <span class="btn btn-primary" style="margin-top: 8px;">도면 파일 선택하기</span>
+    </label>
+  </div>
+
+  <!-- Loading Modal Overlay for Server Processing -->
+  <div id="loading-overlay" class="hidden">
+    <div class="loading-box">
+      <div class="spinner"></div>
+      <div class="loading-title">도면 파일을 서버에서 분석 중입니다...</div>
+      <div class="loading-desc" id="loading-filename">파일명: -</div>
+      <div class="progress-bar-container">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+      <div class="loading-sub" id="loading-sub">대용량 도면 데이터를 파싱하고 3D 메쉬를 생성하고 있습니다. 잠시만 기다려 주세요.</div>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept=".dxf,.dwg">
+
+  <!-- Main JavaScript App -->
+  <script src="app.js"></script>
+</body>
+</html>
