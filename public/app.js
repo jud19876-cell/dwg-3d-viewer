@@ -60,65 +60,6 @@ function cleanDxfText(rawText) {
   return txt.trim();
 }
 
-// Strict filter to discard random binary stream text noise
-function isRealCadText(str) {
-  if (!str) return false;
-  const s = str.trim();
-  if (s.length < 2 || s.length > 50) return false;
-
-  // Filter internal software metadata keywords
-  const noiseKeywords = [
-    'BinaryFile', 'DesignBuilder', 'straight', 'plane', 'loop', 'mesh', 
-    'edge', 'vertex', 'face', 'builder', 'contents', 'link', 'sun', 
-    'space', 'AC1032', 'RdAk', 'DUN', 'Controller', 'Data'
-  ];
-  if (noiseKeywords.some(kw => s.includes(kw))) {
-    return false;
-  }
-
-  // 1. Korean Text is ALWAYS valid CAD text
-  if (/[\u3131-\u318E\uAC00-\uD7A3]/.test(s)) {
-    return true;
-  }
-
-  // 2. Discard random jumbled binary string tokens (e.g. "GB1D8731wHz1sZ26")
-  if (/^[A-Za-z0-9]{5,}$/.test(s) && /[A-Z]/.test(s) && /[a-z]/.test(s)) {
-    return false;
-  }
-
-  // 3. Match clean CAD terms (e.g., HVAC, ROOM, AHU-01, PIPE, DN100, ELEVATION, LEVEL 1, etc.)
-  if (/^([A-Z0-9_\-\.\s]{2,}|[0-9]+(\.[0-9]+)?\s*(mm|m|mm2|kg|°C|℃|FL|SL|CH)?)$/i.test(s)) {
-    return true;
-  }
-
-  return false;
-}
-
-// Filter function to catch internal mechanical equipment part codes
-function isInternalMachinePartCode(str) {
-  if (!str) return false;
-  const s = str.trim();
-  
-  if (!isRealCadText(s)) return true;
-
-  if (s.includes('TM KOREA') || s.includes('Data 5') || s.includes('C/R') || s.includes('C/P') || s.includes('O/F')) return true;
-  if (/^[0-9]{2}\s*H[0-9]{3}/i.test(s)) return true;
-  if (/^M[0-9]{1,2}$/i.test(s)) return true;
-  if (/^FLS-[0-9]{3}/i.test(s)) return true;
-  if (/^RS[0-9]{2}X[0-9]{2}T/i.test(s)) return true;
-  if (/^SPI[0-9A-Z-]+/i.test(s)) return true;
-  if (/^MPL-[0-9A-Z-]+/i.test(s)) return true;
-  if (/[0-9]{4}ZZ/i.test(s)) return true;
-  if (/^[A-Z]{3,4}[0-9]{4,}/i.test(s)) return true;
-  if (/^[0-9]{2,}[A-Z][0-9]{4,}/i.test(s)) return true;
-  if (/^UC[PT][0-9]{3}/i.test(s)) return true;
-  if (/^39B[0-9A-Z]{5,}/i.test(s)) return true;
-  if (/^[0-9]\s*S8M/i.test(s) || /S8M/i.test(s)) return true;
-  if (/^9IDD2/i.test(s) || /DUN$/i.test(s) || s === 'Controller' || s === '1/10') return true;
-
-  return false;
-}
-
 // Paper ISO dimensions in mm
 const PAPER_DIMENSIONS = {
   a4: { width: 297, height: 210 },
@@ -779,22 +720,17 @@ function uploadAndRenderFile(file) {
     return;
   }
 
-  // Raw DWG Binary File Loader with Client-Side Direct Parser & Cloud Express API
+  // Raw DWG Binary File Loader with Express Server API
   loadingFilename.innerText = `파일명: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
-  loadingSub.innerText = "DWG 3D 메쉬 데이터 렌더링 중...";
+  loadingSub.innerText = "서버 C++ CAD 엔진으로 DWG 도면 변환 중...";
   progressBar.style.width = "30%";
   loadingOverlay.classList.remove('hidden');
 
-  // Try local or cloud endpoint
   const formData = new FormData();
   formData.append('file', file);
 
   const xhr = new XMLHttpRequest();
-  const serverUrl = window.location.origin.startsWith('http') && !window.location.origin.includes('github.io')
-    ? '/api/upload' 
-    : 'https://dwg-3d-viewer-server.onrender.com/api/upload';
-
-  xhr.open('POST', serverUrl, true);
+  xhr.open('POST', '/api/upload', true);
 
   xhr.upload.onprogress = function(e) {
     if (e.lengthComputable) {
@@ -822,46 +758,27 @@ function uploadAndRenderFile(file) {
               loadingOverlay.classList.add('hidden');
             }, 100);
           } else {
-            fallbackClientDwgParser(file);
+            loadingOverlay.classList.add('hidden');
+            alert("DWG 렌더링 오류: " + (response.message || "도면 파싱 실패"));
           }
         } catch (err) {
-          fallbackClientDwgParser(file);
+          console.error(err);
+          loadingOverlay.classList.add('hidden');
+          alert("응답 데이터를 처리하는 중 오류가 발생했습니다.");
         }
       }, 50);
     } else {
-      fallbackClientDwgParser(file);
+      loadingOverlay.classList.add('hidden');
+      alert("서버 응답 오류 (코드: " + xhr.status + ")");
     }
   };
 
   xhr.onerror = function() {
-    fallbackClientDwgParser(file);
+    loadingOverlay.classList.add('hidden');
+    alert("서버와 통신 중 연결 에러가 발생했습니다.");
   };
 
   xhr.send(formData);
-}
-
-// Client-Side Fallback Binary DWG Reader
-function fallbackClientDwgParser(file) {
-  const loadingOverlay = document.getElementById('loading-overlay');
-  loadingOverlay.classList.add('hidden');
-
-  alert(
-    "📢 [오토캐드 DWG 3D/2D 도면 안내]\n\n" +
-    "선택하신 도면은 31.62MB 오토캐드 최신 DWG 도면입니다.\n\n" +
-    "깃허브 웹 주소(Static Web Host)에는 C++ CAD 변환 엔진이 포함되지 않아 오토캐드 DWG 원본을 100% 레이어로 시각화하기 어렵습니다.\n\n" +
-    "💡 해결 방법 2가지:\n" +
-    "1) 내 컴퓨터에서 [DWG_뷰어_실행.bat]을 실행하시면 C++ CAD 엔진이 작동하여 31.62MB DWG 파일의 모든 도면선, 레이어, 텍스트가 100% 깔끔하게 구동됩니다!\n" +
-    "2) 또는 오토캐드에서 .dxf 로 '다른 이름으로 저장' 하신 파일은 깃허브 웹 링크에서도 백엔드 없이 1초 만에 100% 똑같이 구동됩니다!"
-  );
-}
-
-// Parse DWG Binary Stream cleanly without random line or string noise
-function parseDwgBinaryStream(arrayBuffer, fileName) {
-  return {
-    tables: { layer: { layers: { '0': { name: '0', color: 7 } } } },
-    entities: [],
-    blocks: {}
-  };
 }
 
 // --- Ultra Fast Merged LineSegments & Text Canvas Sprite Renderer ---
@@ -980,10 +897,6 @@ function renderCadDataFast(cadData, fileSizeMb) {
       case 'MTEXT': {
         const textStr = cleanDxfText(entity.text);
         if (textStr) {
-          if (isInternalMachinePartCode(textStr)) {
-            break;
-          }
-
           const textHeight = entity.height ? Math.min(Math.max(entity.height * 1.5, 60.0), 300.0) : 180.0;
           const pos = entity.position || entity.startPoint || { x: 0, y: 0, z: 0 };
           const v = applyTransform(pos, parentMatrix);
