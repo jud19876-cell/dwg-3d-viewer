@@ -115,11 +115,16 @@ function parseDwgBufferToDxfData(buffer) {
     const y2 = floatArr[i + 3];
 
     if (isFinite(x1) && isFinite(y1) && isFinite(x2) && isFinite(y2)) {
+      // Discard lines touching (0,0) origin or tiny noise lines
+      if (Math.abs(x1) < 1000 && Math.abs(y1) < 1000) continue;
+      if (Math.abs(x2) < 1000 && Math.abs(y2) < 1000) continue;
+      if (Math.abs(x1 - x2) < 20 && Math.abs(y1 - y2) < 20) continue;
+
       const dx = x2 - x1;
       const dy = y2 - y1;
       const len = Math.sqrt(dx * dx + dy * dy);
 
-      if (len >= 5 && len <= 100000 && Math.abs(x1) < 2000000 && Math.abs(y1) < 2000000) {
+      if (len >= 50 && len <= 200000 && Math.abs(x1) < 3000000 && Math.abs(y1) < 3000000) {
         entities.push({
           type: 'LINE',
           layer: 'DWG_HVAC_LAYER',
@@ -130,7 +135,7 @@ function parseDwgBufferToDxfData(buffer) {
           ]
         });
         validLineCount++;
-        if (validLineCount >= 20000) break;
+        if (validLineCount >= 25000) break;
       }
     }
   }
