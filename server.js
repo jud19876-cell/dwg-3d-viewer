@@ -140,6 +140,11 @@ function parseDwgBufferToDxfData(buffer) {
   };
 }
 
+// Health Check Endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', version: '2.0.0', time: new Date().toISOString() });
+});
+
 // Upload & Convert Endpoint
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   if (!req.file) {

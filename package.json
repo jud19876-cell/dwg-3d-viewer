@@ -1,6 +1,6 @@
 {
   "name": "dxf-dwg-3d-viewer",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Full-stack DWG & DXF 3D Web Viewer Application",
   "main": "server.js",
   "scripts": {
