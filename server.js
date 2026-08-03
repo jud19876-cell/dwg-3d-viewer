@@ -20,7 +20,7 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-const sysTempDir = 'C:\\Temp';
+const sysTempDir = path.join(__dirname, 'temp');
 if (!fs.existsSync(sysTempDir)) {
   fs.mkdirSync(sysTempDir, { recursive: true });
 }
@@ -41,6 +41,7 @@ const upload = multer({
 
 // Serve Static Frontend Files
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
 // Convert DWG using native AutoCAD Engine via C:\Temp (clean ASCII path)
 function convertDwgWithAutoCAD(dwgFilePath) {
