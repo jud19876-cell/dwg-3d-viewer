@@ -23,7 +23,7 @@ const ACI_COLORS = [
   0x003fff, 0x7f9f7f, 0x0029a5, 0x5267a5, 0x001f7f, 0x3f4f7f, 0x00134c, 0x262f4c,
   0x000926, 0x172613, 0x0000ff, 0x7f7f7f, 0x0000a5, 0x5252a5, 0x00007f, 0x3f3f7f,
   0x00004c, 0x26264c, 0x000026, 0x131326, 0x3f00ff, 0x9f7f7f, 0x2900a5, 0x6752a5,
-  0x1f007f, 0x4f3f7f, 0x13004c, 0x2f264c, 0x090026, 0x171326, 0x7f00ff, 0xbf7f7f,
+  0x1f007f, 0.4f3f7f, 0x13004c, 0x2f264c, 0x090026, 0x171326, 0x7f00ff, 0xbf7f7f,
   0x5200a5, 0x7b52a5, 0x3f007f, 0x5f3f7f, 0x26004c, 0x39264c, 0x130026, 0x1c1326,
   0xbf00ff, 0xdf7f7f, 0x7b00a5, 0x9052a5, 0x5f007f, 0x6f3f7f, 0x39004c, 0x43264c,
   0x1c0026, 0x211326, 0xff00ff, 0xff7f7f, 0xa500a5, 0xa552a5, 0x7f007f, 0x7f3f7f,
@@ -694,8 +694,47 @@ function uploadAndRenderFile(file) {
   const progressBar = document.getElementById('progress-bar');
   const loadingSub = document.getElementById('loading-sub');
 
+  const fileNameLower = file.name.toLowerCase();
+
+  // Pure Client-Side DXF File Loader (No Server Needed - Works 100% Native on GitHub Pages)
+  if (fileNameLower.endsWith('.dxf')) {
+    loadingFilename.innerText = `파일명: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
+    loadingSub.innerText = "브라우저에서 DXF 도면을 파싱하는 중입니다...";
+    progressBar.style.width = "40%";
+    loadingOverlay.classList.remove('hidden');
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        if (window.DxfParser) {
+          const parser = new window.DxfParser();
+          const parsed = parser.parseSync(e.target.result);
+          document.getElementById('status-filename').innerText = file.name;
+          
+          renderCadDataFast(parsed, (file.size / (1024 * 1024)).toFixed(2));
+
+          progressBar.style.width = "100%";
+          setTimeout(() => {
+            document.getElementById('dropzone-overlay').classList.add('hidden');
+            loadingOverlay.classList.add('hidden');
+          }, 100);
+        } else {
+          alert("DXF 파서 라이브러리를 로드하는 중입니다. 잠시 후 시도하세요.");
+          loadingOverlay.classList.add('hidden');
+        }
+      } catch (err) {
+        console.error(err);
+        alert("DXF 파싱 오류: " + err.message);
+        loadingOverlay.classList.add('hidden');
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+    return;
+  }
+
+  // DWG File Loader via Express Server API
   loadingFilename.innerText = `파일명: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
-  loadingSub.innerText = "서버로 도면 데이터를 전송 중입니다...";
+  loadingSub.innerText = "서버로 DWG 도면 데이터를 전송 중입니다...";
   progressBar.style.width = "10%";
   loadingOverlay.classList.remove('hidden');
 
@@ -703,7 +742,13 @@ function uploadAndRenderFile(file) {
   formData.append('file', file);
 
   const xhr = new XMLHttpRequest();
-  xhr.open('POST', '/api/upload', true);
+  
+  // Use relative endpoint if running local/cloud Express server, or fallback
+  const serverUrl = window.location.origin.includes('github.io') 
+    ? 'https://dwg-3d-viewer.onrender.com/api/upload' 
+    : '/api/upload';
+
+  xhr.open('POST', serverUrl, true);
 
   xhr.upload.onprogress = function(e) {
     if (e.lengthComputable) {
@@ -741,14 +786,24 @@ function uploadAndRenderFile(file) {
         }
       }, 50);
     } else {
-      alert(`업로드 실패 (코드: ${xhr.status})`);
       loadingOverlay.classList.add('hidden');
+      alert(
+        "📢 [안내] 깃허브 웹 주소에서는 DXF 도면 파일(.dxf)이 백엔드 서버 없이 즉시 로드됩니다!\n\n" +
+        "DWG 도면(.dwg)을 여시려면:\n" +
+        "1) 해당 도면을 캐드에서 .dxf 로 '다른 이름으로 저장'하여 드롭하시면 깃허브 주소에서도 즉시 켜집니다.\n" +
+        "2) 또는 내 컴퓨터에서 [DWG_3D_뷰어_실행.bat]을 더블 클릭해 주시면 DWG 파일도 바로 켜집니다!"
+      );
     }
   };
 
   xhr.onerror = function() {
-    alert("서버 통신 중 에러가 발생했습니다. 백엔드 서버가 실행 중인지 확인하세요.");
     loadingOverlay.classList.add('hidden');
+    alert(
+      "📢 [안내] 깃허브 웹 주소에서는 DXF 도면 파일(.dxf)이 백엔드 서버 없이 즉시 로드됩니다!\n\n" +
+      "DWG 도면(.dwg)을 여시려면:\n" +
+      "1) 해당 도면을 캐드에서 .dxf 로 '다른 이름으로 저장'하여 드롭하시면 깃허브 주소에서도 즉시 켜집니다.\n" +
+      "2) 또는 내 컴퓨터에서 [DWG_3D_뷰어_실행.bat]을 더블 클릭해 주시면 DWG 파일도 바로 켜집니다!"
+    );
   };
 
   xhr.send(formData);
