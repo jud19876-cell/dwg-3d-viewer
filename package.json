@@ -1,22 +1,17 @@
 {
   "name": "dxf-dwg-3d-viewer",
-  "version": "3.0.0",
-  "description": "Full-stack DWG & DXF 3D Web Viewer Application",
+  "version": "5.0.0",
+  "description": "Full-stack DWG/DXF 3D Viewer + DWG→DXF Converter with CloudConvert",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
-  "keywords": [
-    "dwg",
-    "dxf",
-    "threejs",
-    "cad-viewer",
-    "3d-viewer"
-  ],
+  "keywords": ["dwg", "dxf", "threejs", "cad-viewer", "3d-viewer", "converter"],
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "cloudconvert": "^3.0.0",
     "cors": "^2.8.5",
     "dxf-parser": "^1.1.2",
     "express": "^4.19.2",

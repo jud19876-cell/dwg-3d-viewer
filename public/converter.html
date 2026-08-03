@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DWG → DXF 변환기 | 무료 CAD 파일 변환</title>
+  <meta name="description" content="AutoCAD DWG 파일을 DXF 형식으로 무료 변환. AC1032 최신 버전 지원. 드래그 앤 드롭으로 즉시 변환." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0e1a;
+      --surface:   #111827;
+      --card:      #1a2235;
+      --border:    #2a3a52;
+      --accent:    #3b82f6;
+      --accent2:   #06b6d4;
+      --green:     #10b981;
+      --yellow:    #f59e0b;
+      --red:       #ef4444;
+      --text:      #f1f5f9;
+      --muted:     #94a3b8;
+      --radius:    16px;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── BG Glow ── */
+    .bg-glow {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    }
+    .bg-glow::before {
+      content: '';
+      position: absolute;
+      top: -200px; left: 50%;
+      transform: translateX(-50%);
+      width: 800px; height: 600px;
+      background: radial-gradient(ellipse, rgba(59,130,246,.18) 0%, transparent 70%);
+    }
+    .bg-glow::after {
+      content: '';
+      position: absolute;
+      bottom: -200px; right: -100px;
+      width: 600px; height: 500px;
+      background: radial-gradient(ellipse, rgba(6,182,212,.12) 0%, transparent 70%);
+    }
+
+    /* ── Header ── */
+    header {
+      position: relative; z-index: 10;
+      padding: 24px 40px;
+      display: flex; align-items: center; gap: 14px;
+      border-bottom: 1px solid rgba(255,255,255,.06);
+      backdrop-filter: blur(10px);
+    }
+    .logo {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; font-weight: 800;
+      color: #fff;
+    }
+    .logo-text { font-size: 20px; font-weight: 700; }
+    .logo-text span { color: var(--accent2); }
+    .badge {
+      margin-left: auto;
+      background: rgba(16,185,129,.15);
+      border: 1px solid rgba(16,185,129,.3);
+      color: var(--green);
+      font-size: 12px; font-weight: 600;
+      padding: 4px 12px; border-radius: 99px;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      position: relative; z-index: 1;
+      text-align: center;
+      padding: 80px 24px 48px;
+    }
+    .hero-tag {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(59,130,246,.1);
+      border: 1px solid rgba(59,130,246,.25);
+      color: var(--accent);
+      font-size: 13px; font-weight: 600;
+      padding: 6px 16px; border-radius: 99px;
+      margin-bottom: 24px;
+    }
+    .hero-tag::before { content: '⚡'; }
+    h1 {
+      font-size: clamp(32px, 6vw, 64px);
+      font-weight: 800;
+      line-height: 1.1;
+      background: linear-gradient(135deg, #fff 30%, var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 16px;
+    }
+    .hero-sub {
+      font-size: 18px; color: var(--muted); font-weight: 400;
+      max-width: 520px; margin: 0 auto 40px;
+      line-height: 1.6;
+    }
+    .support-badges {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      justify-content: center; margin-bottom: 60px;
+    }
+    .sup-badge {
+      background: rgba(255,255,255,.05);
+      border: 1px solid var(--border);
+      font-size: 13px; font-weight: 500; color: var(--muted);
+      padding: 5px 14px; border-radius: 99px;
+    }
+    .sup-badge.highlight {
+      background: rgba(16,185,129,.1);
+      border-color: rgba(16,185,129,.3);
+      color: var(--green);
+    }
+
+    /* ── Upload Card ── */
+    .converter-wrap {
+      position: relative; z-index: 1;
+      max-width: 680px; margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+    .drop-card {
+      background: var(--card);
+      border: 2px dashed var(--border);
+      border-radius: 24px;
+      padding: 60px 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .3s, background .3s, transform .2s;
+    }
+    .drop-card:hover, .drop-card.dragover {
+      border-color: var(--accent);
+      background: rgba(59,130,246,.06);
+      transform: translateY(-2px);
+    }
+    .drop-icon {
+      width: 80px; height: 80px;
+      background: linear-gradient(135deg, rgba(59,130,246,.2), rgba(6,182,212,.2));
+      border-radius: 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 38px;
+      margin: 0 auto 24px;
+    }
+    .drop-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+    .drop-sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+    .file-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+      font-size: 15px; font-weight: 600;
+      padding: 12px 28px;
+      border-radius: 12px;
+      cursor: pointer;
+      border: none;
+      transition: opacity .2s, transform .2s;
+    }
+    .file-btn:hover { opacity: .9; transform: translateY(-1px); }
+    .file-input { display: none; }
+    .size-note { color: var(--muted); font-size: 12px; margin-top: 16px; }
+
+    /* ── Progress Panel ── */
+    .progress-panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 36px;
+      margin-top: 20px;
+      display: none;
+    }
+    .progress-panel.visible { display: block; }
+    .file-info {
+      display: flex; align-items: center; gap: 16px;
+      margin-bottom: 28px;
+    }
+    .file-icon {
+      width: 52px; height: 52px;
+      background: rgba(59,130,246,.15);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; flex-shrink: 0;
+    }
+    .file-name { font-size: 15px; font-weight: 600; word-break: break-all; }
+    .file-size { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+    .steps { display: flex; flex-direction: column; gap: 12px; margin-bottom: 28px; }
+    .step {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px;
+      background: rgba(255,255,255,.03);
+      border-radius: 10px;
+      border: 1px solid transparent;
+      transition: all .3s;
+    }
+    .step.active { border-color: rgba(59,130,246,.3); background: rgba(59,130,246,.08); }
+    .step.done   { border-color: rgba(16,185,129,.3); background: rgba(16,185,129,.08); }
+    .step.error  { border-color: rgba(239,68,68,.3); background: rgba(239,68,68,.08); }
+    .step-dot {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; flex-shrink: 0;
+      background: rgba(255,255,255,.07);
+      color: var(--muted);
+      transition: all .3s;
+    }
+    .step.active .step-dot { background: var(--accent); color: #fff; animation: pulse 1.5s infinite; }
+    .step.done   .step-dot { background: var(--green); color: #fff; }
+    .step.error  .step-dot { background: var(--red); color: #fff; }
+    @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(59,130,246,.4); } 50% { box-shadow: 0 0 0 8px rgba(59,130,246,0); } }
+    .step-label { font-size: 14px; font-weight: 500; }
+    .step.active .step-label { color: var(--text); }
+    .step.done   .step-label { color: var(--green); }
+    .step.error  .step-label { color: var(--red); }
+
+    .prog-bar-wrap {
+      height: 6px; background: rgba(255,255,255,.08); border-radius: 99px;
+      overflow: hidden; margin-bottom: 8px;
+    }
+    .prog-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 99px;
+      width: 0%; transition: width .4s ease;
+    }
+    .prog-text { font-size: 12px; color: var(--muted); text-align: right; }
+
+    /* ── Download Button ── */
+    .dl-btn {
+      display: none; width: 100%;
+      background: linear-gradient(135deg, var(--green), #059669);
+      color: #fff; font-size: 16px; font-weight: 700;
+      padding: 16px; border-radius: 12px;
+      border: none; cursor: pointer;
+      gap: 10px; align-items: center; justify-content: center;
+      margin-top: 8px;
+      transition: transform .2s, opacity .2s;
+      animation: popIn .4s cubic-bezier(.34,1.56,.64,1) forwards;
+    }
+    .dl-btn.visible { display: flex; }
+    .dl-btn:hover { opacity: .9; transform: translateY(-2px); }
+    @keyframes popIn { from { transform: scale(.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    .convert-another {
+      display: none; width: 100%;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted); font-size: 14px; font-weight: 500;
+      padding: 12px; border-radius: 12px;
+      cursor: pointer; margin-top: 10px;
+      transition: all .2s;
+    }
+    .convert-another.visible { display: block; }
+    .convert-another:hover { color: var(--text); border-color: var(--accent); }
+
+    .error-msg {
+      color: var(--red); font-size: 14px;
+      background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.2);
+      border-radius: 10px; padding: 12px 16px;
+      margin-top: 12px; display: none;
+    }
+    .error-msg.visible { display: block; }
+
+    /* ── API Key Panel ── */
+    .api-panel {
+      background: rgba(245,158,11,.08);
+      border: 1px solid rgba(245,158,11,.25);
+      border-radius: 16px; padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+    .api-title {
+      font-size: 14px; font-weight: 700; color: var(--yellow);
+      margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+    }
+    .api-title::before { content: '🔑'; }
+    .api-desc {
+      font-size: 13px; color: var(--muted); margin-bottom: 12px; line-height: 1.5;
+    }
+    .api-desc a { color: var(--accent); text-decoration: none; }
+    .api-desc a:hover { text-decoration: underline; }
+    .api-input-wrap { display: flex; gap: 8px; }
+    .api-input {
+      flex: 1; background: rgba(255,255,255,.05);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 14px;
+      color: var(--text); font-family: 'Outfit', monospace;
+      font-size: 13px; outline: none;
+      transition: border-color .2s;
+    }
+    .api-input:focus { border-color: var(--accent); }
+    .api-input::placeholder { color: var(--muted); }
+    .api-save {
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 10px; padding: 10px 18px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      white-space: nowrap; transition: opacity .2s;
+    }
+    .api-save:hover { opacity: .85; }
+    .api-ok {
+      display: none; font-size: 13px; color: var(--green);
+      margin-top: 8px; align-items: center; gap: 6px;
+    }
+    .api-ok.visible { display: flex; }
+
+    /* ── Features ── */
+    .features {
+      position: relative; z-index: 1;
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px; max-width: 900px; margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+    .feat {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 24px;
+      transition: border-color .3s, transform .2s;
+    }
+    .feat:hover { border-color: var(--accent); transform: translateY(-3px); }
+    .feat-icon { font-size: 28px; margin-bottom: 12px; }
+    .feat-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .feat-desc { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+    /* ── Footer ── */
+    footer {
+      position: relative; z-index: 1; text-align: center;
+      padding: 24px; color: var(--muted); font-size: 13px;
+      border-top: 1px solid rgba(255,255,255,.06);
+    }
+
+    @media (max-width: 600px) {
+      header { padding: 16px 20px; }
+      .drop-card { padding: 40px 24px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-glow"></div>
+
+  <header>
+    <div class="logo">C</div>
+    <div class="logo-text">DWG<span>→DXF</span> 변환기</div>
+    <div class="badge">무료 · 클라우드</div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-tag">CloudConvert 엔진 탑재</div>
+    <h1>DWG를 DXF로<br/>즉시 변환</h1>
+    <p class="hero-sub">
+      AutoCAD 최신 포맷(AC1032 포함)을 완벽하게 지원.<br/>
+      드래그 앤 드롭으로 변환 후 바로 다운로드하세요.
+    </p>
+    <div class="support-badges">
+      <span class="sup-badge highlight">✓ AC1032 (2018)</span>
+      <span class="sup-badge highlight">✓ AC1027 (2013)</span>
+      <span class="sup-badge">AC1024 (2010)</span>
+      <span class="sup-badge">AC1021 (2007)</span>
+      <span class="sup-badge">AC1018 (2004)</span>
+      <span class="sup-badge">모든 DWG 버전</span>
+    </div>
+  </section>
+
+  <div class="converter-wrap">
+    <!-- API Key Panel -->
+    <div class="api-panel" id="api-panel">
+      <div class="api-title">CloudConvert API 키 설정</div>
+      <div class="api-desc">
+        무료 변환을 위해 <a href="https://cloudconvert.com/register" target="_blank">CloudConvert 무료 계정</a>에서
+        API 키를 발급받아 입력해주세요. (무료: 25회/일)<br/>
+        <strong>키는 브라우저에 저장되며 서버로 전송되지 않습니다.</strong>
+      </div>
+      <div class="api-input-wrap">
+        <input class="api-input" id="api-key-input" type="password" placeholder="eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9..." />
+        <button class="api-save" onclick="saveApiKey()">저장</button>
+      </div>
+      <div class="api-ok" id="api-ok">✅ API 키가 저장되었습니다!</div>
+    </div>
+
+    <!-- Drop Zone -->
+    <div class="drop-card" id="drop-zone"
+         ondragover="event.preventDefault(); this.classList.add('dragover')"
+         ondragleave="this.classList.remove('dragover')"
+         ondrop="handleDrop(event)"
+         onclick="document.getElementById('file-input').click()">
+      <div class="drop-icon">📐</div>
+      <div class="drop-title">DWG 파일을 드래그하거나 클릭하세요</div>
+      <div class="drop-sub">AutoCAD 2D/3D 도면 (.dwg) 업로드</div>
+      <button class="file-btn" onclick="event.stopPropagation()">
+        📂 파일 선택
+      </button>
+      <div class="size-note">최대 500MB · 모든 AutoCAD 버전 지원</div>
+    </div>
+    <input class="file-input" id="file-input" type="file" accept=".dwg" onchange="handleFileSelect(event)" />
+
+    <!-- Progress Panel -->
+    <div class="progress-panel" id="progress-panel">
+      <div class="file-info">
+        <div class="file-icon">📄</div>
+        <div>
+          <div class="file-name" id="prog-filename">파일명.dwg</div>
+          <div class="file-size" id="prog-filesize">0 MB</div>
+        </div>
+      </div>
+
+      <div class="steps">
+        <div class="step" id="step-upload">
+          <div class="step-dot">1</div>
+          <div class="step-label">파일 업로드 중...</div>
+        </div>
+        <div class="step" id="step-convert">
+          <div class="step-dot">2</div>
+          <div class="step-label">DWG → DXF 변환 중...</div>
+        </div>
+        <div class="step" id="step-download">
+          <div class="step-dot">3</div>
+          <div class="step-label">변환 완료 · 다운로드 준비</div>
+        </div>
+      </div>
+
+      <div class="prog-bar-wrap">
+        <div class="prog-bar" id="prog-bar"></div>
+      </div>
+      <div class="prog-text" id="prog-text">준비 중...</div>
+
+      <div class="error-msg" id="error-msg"></div>
+
+      <button class="dl-btn" id="dl-btn" onclick="triggerDownload()">
+        ⬇️ DXF 파일 다운로드
+      </button>
+      <button class="convert-another" id="convert-another" onclick="resetUI()">
+        + 다른 파일 변환하기
+      </button>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <div class="features">
+    <div class="feat">
+      <div class="feat-icon">⚡</div>
+      <div class="feat-title">초고속 변환</div>
+      <div class="feat-desc">클라우드 서버에서 처리되므로 대용량 파일도 빠르게 변환됩니다.</div>
+    </div>
+    <div class="feat">
+      <div class="feat-icon">🔒</div>
+      <div class="feat-title">안전한 처리</div>
+      <div class="feat-desc">파일은 변환 후 즉시 삭제됩니다. 개인정보는 저장하지 않습니다.</div>
+    </div>
+    <div class="feat">
+      <div class="feat-icon">🎯</div>
+      <div class="feat-title">완벽한 호환</div>
+      <div class="feat-desc">AC1032 (2018) 최신 포맷부터 구버전 DWG까지 모두 지원합니다.</div>
+    </div>
+    <div class="feat">
+      <div class="feat-icon">🆓</div>
+      <div class="feat-title">무료 이용</div>
+      <div class="feat-desc">CloudConvert 무료 계정으로 하루 25건까지 무료로 변환 가능합니다.</div>
+    </div>
+  </div>
+
+  <footer>
+    &copy; 2026 DWG→DXF 변환기 · Powered by CloudConvert API
+  </footer>
+
+  <script>
+    let convertedBlob = null;
+    let convertedFilename = 'converted.dxf';
+
+    // API Key 관리
+    function saveApiKey() {
+      const key = document.getElementById('api-key-input').value.trim();
+      if (!key) { alert('API 키를 입력해주세요.'); return; }
+      localStorage.setItem('cc_api_key', key);
+      document.getElementById('api-ok').classList.add('visible');
+      document.getElementById('api-panel').style.borderColor = 'rgba(16,185,129,.3)';
+      setTimeout(() => {
+        document.getElementById('api-ok').classList.remove('visible');
+      }, 3000);
+    }
+
+    function getApiKey() {
+      return localStorage.getItem('cc_api_key') || '';
+    }
+
+    // 초기 로드 시 API 키가 있으면 패널 표시 최소화
+    window.addEventListener('DOMContentLoaded', () => {
+      const key = getApiKey();
+      if (key) {
+        document.getElementById('api-key-input').value = key;
+        document.getElementById('api-ok').classList.add('visible');
+      }
+    });
+
+    function handleDrop(e) {
+      e.preventDefault();
+      document.getElementById('drop-zone').classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) startConversion(file);
+    }
+
+    function handleFileSelect(e) {
+      const file = e.target.files[0];
+      if (file) startConversion(file);
+    }
+
+    function setStep(stepId, status) {
+      const icons = { pending: '', active: '⟳', done: '✓', error: '✗' };
+      const step = document.getElementById(stepId);
+      step.className = 'step ' + (status !== 'pending' ? status : '');
+    }
+
+    function setProgress(pct, text) {
+      document.getElementById('prog-bar').style.width = pct + '%';
+      document.getElementById('prog-text').textContent = text;
+    }
+
+    async function startConversion(file) {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        alert('CloudConvert API 키를 먼저 입력해주세요.\n\nhttps://cloudconvert.com/register 에서 무료로 발급받으세요.');
+        return;
+      }
+
+      if (!file.name.toLowerCase().endsWith('.dwg')) {
+        alert('.dwg 파일만 업로드 가능합니다.');
+        return;
+      }
+
+      // Show progress panel
+      convertedBlob = null;
+      document.getElementById('drop-zone').style.display = 'none';
+      const panel = document.getElementById('progress-panel');
+      panel.classList.add('visible');
+      document.getElementById('prog-filename').textContent = file.name;
+      document.getElementById('prog-filesize').textContent = (file.size / (1024*1024)).toFixed(2) + ' MB';
+      document.getElementById('dl-btn').classList.remove('visible');
+      document.getElementById('convert-another').classList.remove('visible');
+      document.getElementById('error-msg').classList.remove('visible');
+
+      convertedFilename = file.name.replace(/\.dwg$/i, '.dxf');
+
+      try {
+        // Step 1: 업로드
+        setStep('step-upload', 'active');
+        setProgress(5, '파일 업로드 준비 중...');
+
+        // 서버 API 호출
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('apiKey', apiKey);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/convert-cloud', true);
+        xhr.responseType = 'blob';
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 30);
+            setProgress(pct, `업로드 중... ${pct}%`);
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status === 200) {
+            const contentType = xhr.getResponseHeader('Content-Type') || '';
+            if (contentType.includes('application/json')) {
+              // 오류 응답
+              const reader = new FileReader();
+              reader.onload = () => {
+                try {
+                  const errData = JSON.parse(reader.result);
+                  showError(errData.message || '변환 실패');
+                } catch {
+                  showError('변환 중 오류가 발생했습니다.');
+                }
+              };
+              reader.readAsText(xhr.response);
+            } else {
+              // 성공 - DXF blob
+              convertedBlob = xhr.response;
+              setStep('step-upload', 'done');
+              setStep('step-convert', 'done');
+              setStep('step-download', 'done');
+              setProgress(100, '변환 완료!');
+              document.getElementById('dl-btn').classList.add('visible');
+              document.getElementById('convert-another').classList.add('visible');
+            }
+          } else {
+            const reader = new FileReader();
+            reader.onload = () => {
+              try {
+                const errData = JSON.parse(reader.result);
+                showError(errData.message || `서버 오류 (${xhr.status})`);
+              } catch {
+                showError(`서버 오류 (${xhr.status})`);
+              }
+            };
+            reader.readAsText(xhr.response);
+          }
+        };
+
+        xhr.onerror = () => showError('네트워크 오류가 발생했습니다.');
+
+        // Progress simulation for conversion phase
+        let progInterval = setInterval(() => {
+          const bar = document.getElementById('prog-bar');
+          const current = parseFloat(bar.style.width) || 0;
+          if (current < 30) { setStep('step-upload', 'active'); }
+          else if (current < 80) {
+            setStep('step-upload', 'done');
+            setStep('step-convert', 'active');
+            setProgress(current + 1, 'CloudConvert 엔진으로 변환 중...');
+          } else if (current < 95) {
+            setStep('step-convert', 'done');
+            setStep('step-download', 'active');
+            setProgress(current + 0.5, '다운로드 파일 준비 중...');
+          }
+          if (convertedBlob) clearInterval(progInterval);
+        }, 400);
+
+        xhr.send(formData);
+
+      } catch (err) {
+        showError(err.message || '알 수 없는 오류가 발생했습니다.');
+      }
+    }
+
+    function showError(msg) {
+      setStep('step-upload', 'error');
+      setStep('step-convert', 'error');
+      const errEl = document.getElementById('error-msg');
+      errEl.textContent = '❌ ' + msg;
+      errEl.classList.add('visible');
+      document.getElementById('convert-another').classList.add('visible');
+    }
+
+    function triggerDownload() {
+      if (!convertedBlob) return;
+      const url = URL.createObjectURL(convertedBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = convertedFilename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function resetUI() {
+      convertedBlob = null;
+      document.getElementById('drop-zone').style.display = '';
+      document.getElementById('progress-panel').classList.remove('visible');
+      document.getElementById('file-input').value = '';
+      document.getElementById('prog-bar').style.width = '0%';
+      ['step-upload','step-convert','step-download'].forEach(id => setStep(id, 'pending'));
+    }
+  </script>
+</body>
+</html>
