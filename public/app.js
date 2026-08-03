@@ -831,13 +831,12 @@ function fallbackClientDwgParser(file) {
     } catch (err) {
       console.error(err);
       document.getElementById('loading-overlay').classList.add('hidden');
-      alert("DWG 도면 파싱 성공! (일부 레이어 및 텍스트 렌더링 포함)");
     }
   };
   reader.readAsArrayBuffer(file);
 }
 
-// Parse DWG Binary Stream directly in client-side JS
+// Parse DWG Binary Stream cleanly without random line noise
 function parseDwgBinaryStream(arrayBuffer, fileName) {
   const bytes = new Uint8Array(arrayBuffer);
   const textDecoder = new TextDecoder('utf-8', { fatal: false });
@@ -847,47 +846,30 @@ function parseDwgBinaryStream(arrayBuffer, fileName) {
   console.log('[DWG Client Stream Engine] Header:', header);
 
   const entities = [];
-  const layerSet = new Set(['0', 'DEFAULT']);
+  const layerSet = new Set(['0', 'DWG_TEXT_LAYER']);
   
   // Extract text tokens from binary stream
   const textMatches = rawString.match(/([\uAC00-\uD7A3]+|[A-Za-z0-9_\-\.\/]{4,})/g) || [];
-  let currentX = 0, currentY = 0;
+  let currentX = -2000, currentY = 2000;
 
   textMatches.forEach((str, idx) => {
     const s = str.trim();
-    if (s.length >= 2 && !isInternalMachinePartCode(s)) {
-      currentX += (idx % 15) * 800 - 4000;
-      currentY += Math.floor(idx / 15) * 600 - 3000;
+    if (s.length >= 2 && !isInternalMachinePartCode(s) && !s.includes('AC1032') && !s.includes('RdAk')) {
+      currentX += 600;
+      if (currentX > 2000) {
+        currentX = -2000;
+        currentY -= 400;
+      }
       entities.push({
         type: 'TEXT',
         layer: 'DWG_TEXT_LAYER',
         text: s,
         position: { x: currentX, y: currentY, z: 0 },
-        height: 250,
+        height: 220,
         color: 7
       });
-      layerSet.add('DWG_TEXT_LAYER');
     }
   });
-
-  // Extract vector line primitives from DWG binary stream
-  const numLines = Math.min(Math.floor(bytes.length / 32), 15000);
-  for (let i = 0; i < numLines; i += 2) {
-    const idx = i * 16;
-    const x1 = (bytes[idx] | (bytes[idx + 1] << 8) | (bytes[idx + 2] << 16)) % 20000 - 10000;
-    const y1 = (bytes[idx + 3] | (bytes[idx + 4] << 8) | (bytes[idx + 5] << 16)) % 20000 - 10000;
-    const x2 = (bytes[idx + 6] | (bytes[idx + 7] << 8) | (bytes[idx + 8] << 16)) % 20000 - 10000;
-    const y2 = (bytes[idx + 9] | (bytes[idx + 10] << 8) | (bytes[idx + 11] << 16)) % 20000 - 10000;
-
-    if (Math.abs(x2 - x1) < 8000 && Math.abs(y2 - y1) < 8000) {
-      entities.push({
-        type: 'LINE',
-        layer: 'DWG_VECTOR_LAYER',
-        vertices: [{ x: x1, y: y1, z: 0 }, { x: x2, y: y2, z: 0 }],
-        color: (i % 7) + 1
-      });
-    }
-  }
 
   const layers = {};
   layerSet.forEach(lName => {
